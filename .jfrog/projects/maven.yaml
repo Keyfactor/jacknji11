@@ -1,0 +1,10 @@
+version: 1
+type: maven
+resolver:
+  serverId: primekey-internal
+  snapshotRepo: kfc-develop-maven
+  releaseRepo: kfc-develop-maven
+deployer:
+  serverId: primekey-internal
+  snapshotRepo: kfc-develop-maven
+  releaseRepo: kfc-release-maven

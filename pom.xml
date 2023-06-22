@@ -4,12 +4,13 @@
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <modelVersion>4.0.0</modelVersion>
 
-  <groupId>org.pkcs11</groupId>
+  <groupId>com.keyfactor</groupId>
   <artifactId>jacknji11</artifactId>
-  <version>1.3-SNAPSHOT</version>
+  <!-- This version is set automatically by the pipelines in .lighthouse/jenkins-x -->
+  <version>0.0.0</version>
   <name>jacknji11</name>
   <packaging>jar</packaging>
-  
+
   <inceptionYear>2010</inceptionYear>
 
   <description>
@@ -64,7 +65,7 @@
       <version>0.6.0</version>
     </dependency>
 
-    <!-- provided -->    
+    <!-- provided -->
     <dependency>
       <groupId>commons-logging</groupId>
       <artifactId>commons-logging</artifactId>
