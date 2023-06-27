@@ -7,7 +7,28 @@ spec:
     tasks:
     - name: test
       taskSpec:
+        stepTemplate:
+          image: uses:lighthouse:devops/jx3-pipeline-catalog-keyfactor/tasks/java-jar/pullrequest.yaml@master
         steps:
-        - image: uses:lighthouse:devops/jx3-pipeline-catalog-keyfactor/tasks/java-jar/pullrequest.yaml@HEAD
+        - name: git-clone
+        - name: git-merge
+        - name: jx-variables
+        - name: test-build-and-publish
+          image: harbor.k8s.primetest.se/devops/buildtools-alma9-jre11:0.5.0
+          script: |
+            #!/bin/sh
+            source .jx/variables.sh
+            mvn --no-transfer-progress versions:set -DnewVersion=${VERSION}
+            jf config import "$JFROG_CONFIG"
+
+            microdnf install -y softhsm
+            SLOT_ID=$(softhsm2-util --init-token --free --label "test" --pin 1234 --so-pin 1234 | tail -n1 | awk '{ print $NF }')
+            export JACKNJI11_TEST_TESTSLOT=$SLOT_ID
+            export JACKNJI11_TEST_INITSLOT=$SLOT_ID
+            export JACKNJI11_TEST_SO_PIN=1234
+            export JACKNJI11_TEST_USER_PIN=1234
+            export JACKNJI11_PKCS11_LIB_PATH=/usr/lib64/libsofthsm2.so
+
+            jf mvn --no-transfer-progress clean install
   serviceAccountName: tekton-bot
   timeout: 10m

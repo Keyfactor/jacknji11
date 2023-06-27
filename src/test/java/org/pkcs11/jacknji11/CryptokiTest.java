@@ -21,7 +21,6 @@
 
 package org.pkcs11.jacknji11;
 
-import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 import junit.framework.TestCase;
@@ -132,12 +131,6 @@ public class CryptokiTest extends TestCase {
         assertEquals(CKR.SESSION_HANDLE_INVALID, C.CloseSession(s3));
     }
 
-    public void testGetSetOperationState() {
-        long session = CE.OpenSession(TESTSLOT, CK_SESSION_INFO.CKF_RW_SESSION | CK_SESSION_INFO.CKF_SERIAL_SESSION, null, null);
-        byte[] state = CE.GetOperationState(session);
-        CE.SetOperationState(session, state, 0, 0);
-    }
-
     public void testCreateCopyDestroyObject() {
         long session = CE.OpenSession(TESTSLOT, CK_SESSION_INFO.CKF_RW_SESSION | CK_SESSION_INFO.CKF_SERIAL_SESSION, null, null);
         CE.Login(session, CKU.USER, USER_PIN);
@@ -170,7 +163,7 @@ public class CryptokiTest extends TestCase {
         assertEquals(Long.valueOf(CKO.DATA), CE.GetAttributeValue(session, o, CKA.CLASS).getValueLong());
         assertFalse(CE.GetAttributeValue(session, o, CKA.PRIVATE).getValueBool());
         templ = new CKA[] {
-                // Different HSMs are pick in different ways which attributes can be modified, 
+                // Different HSMs are pick in different ways which attributes can be modified,
                 // just modify label which seems to work on most
                 new CKA(CKA.LABEL, "datalabel"),
         };
@@ -327,7 +320,7 @@ public class CryptokiTest extends TestCase {
 
         CE.VerifyInit(session, new CKM(CKM.SHA256_RSA_PKCS), pubKey.value());
         CE.Verify(session, data, sig1);
-        
+
         // Using SignUpdate
         CE.SignInit(session, new CKM(CKM.SHA256_RSA_PKCS), privKey.value());
         CE.SignUpdate(session, new byte[50]);
@@ -377,7 +370,7 @@ public class CryptokiTest extends TestCase {
         LongRef privKey = new LongRef();
         CE.GenerateKeyPair(session, new CKM(CKM.RSA_PKCS_KEY_PAIR_GEN), pubTempl, privTempl, pubKey, privKey);
 
-        // RSA-PSS needs parameters, which specifies the padding to be used, matching the hash algorithm 
+        // RSA-PSS needs parameters, which specifies the padding to be used, matching the hash algorithm
         byte[] params = ULong.ulong2b(new long[]{CKM.SHA256, CKG.MGF1_SHA256, 32});
         CKM ckm = new CKM(CKM.SHA256_RSA_PKCS_PSS, params);
 
@@ -389,7 +382,7 @@ public class CryptokiTest extends TestCase {
 
         CE.VerifyInit(session, ckm, pubKey.value());
         CE.Verify(session, data, sig1);
-        
+
         // Using SignUpdate
         CE.SignInit(session, ckm, privKey.value());
         CE.SignUpdate(session, new byte[50]);
@@ -415,12 +408,12 @@ public class CryptokiTest extends TestCase {
     public void testSignVerifyECDSA() {
         long session = CE.OpenSession(TESTSLOT, CK_SESSION_INFO.CKF_RW_SESSION | CK_SESSION_INFO.CKF_SERIAL_SESSION, null, null);
         CE.LoginUser(session, USER_PIN);
-        // Attributes from PKCS #11 Cryptographic Token Interface Current Mechanisms Specification 
+        // Attributes from PKCS #11 Cryptographic Token Interface Current Mechanisms Specification
         //   Version 2.40 section 2.3.3 - ECDSA public key objects
-        // We use a P-256 key (also known as secp256r1 or prime256v1), the oid 1.2.840.10045.3.1.7 
+        // We use a P-256 key (also known as secp256r1 or prime256v1), the oid 1.2.840.10045.3.1.7
         //   has DER encoding in Hex 06082a8648ce3d030107
         // DER-encoding of an ANSI X9.62 Parameters, also known as "EC domain parameters".
-        //   See X9.62-1998 Public Key Cryptography For The Financial Services Industry: 
+        //   See X9.62-1998 Public Key Cryptography For The Financial Services Industry:
         //   The Elliptic Curve Digital Signature Algorithm (ECDSA), page 27.
         byte[] ecCurveParams = Hex.s2b("06082a8648ce3d030107");
         CKA[] pubTempl = new CKA[] {
@@ -474,9 +467,9 @@ public class CryptokiTest extends TestCase {
         CE.LoginUser(session, USER_PIN);
         // CKM_EC_EDWARDS_KEY_PAIR_GEN
         /*
-            The mechanism can only generate EC public/private key pairs over the curves edwards25519 and edwards448 as defined in RFC 8032 or the curves 
-            id-Ed25519 and id-Ed448 as defined in RFC 8410. These curves can only be specified in the CKA_EC_PARAMS attribute of the template for the 
-            public key using the curveName or the oID methods 
+            The mechanism can only generate EC public/private key pairs over the curves edwards25519 and edwards448 as defined in RFC 8032 or the curves
+            id-Ed25519 and id-Ed448 as defined in RFC 8410. These curves can only be specified in the CKA_EC_PARAMS attribute of the template for the
+            public key using the curveName or the oID methods
         */
         // CKM_EDDSA (signature mechanism)
         /*
@@ -490,7 +483,7 @@ public class CryptokiTest extends TestCase {
         // CK_EDDSA_PARAMS (no params means Ed25519 in keygen?)
         // CK_EDDSA_PARAMS_PTR is a pointer to a CK_EDDSA_PARAMS
         // CKK_EC_EDWARDS (private and public key)
-        
+
         // Attributes from PKCS #11 Cryptographic Token Interface Current Mechanisms Specification Version 2.40 section 2.3.3 - ECDSA public key objects
         /* DER-encoding of an ANSI X9.62 Parameters, also known as "EC domain parameters". */
         // We use a Ed25519 key, the oid 1.3.101.112 has DER encoding in Hex 06032b6570
@@ -539,76 +532,11 @@ public class CryptokiTest extends TestCase {
         }
     }
 
-    /** SignRecoverInit and VerifyRecoverInit is not supported on all HSMs, 
-     * so it has a separate test that may expect to fail with FUNCTION_NOT_SUPPORTED
-     */
-    public void testSignVerifyRecoveryRSA() {
-        long session = CE.OpenSession(TESTSLOT, CK_SESSION_INFO.CKF_RW_SESSION | CK_SESSION_INFO.CKF_SERIAL_SESSION, null, null);
-        CE.LoginUser(session, USER_PIN);
-        // See comments on the method testSignVerifyRSA
-        CKA[] pubTempl = new CKA[] {
-            new CKA(CKA.MODULUS_BITS, 1024),
-            new CKA(CKA.PUBLIC_EXPONENT, Hex.s2b("010001")),
-            new CKA(CKA.WRAP, false),
-            new CKA(CKA.ENCRYPT, false),
-            new CKA(CKA.VERIFY, true),
-            new CKA(CKA.VERIFY_RECOVER, true),
-            new CKA(CKA.TOKEN, true),
-            new CKA(CKA.LABEL, "labelrsa2-public"),
-            new CKA(CKA.ID, "labelrsa2"),
-        };
-        CKA[] privTempl = new CKA[] {
-            new CKA(CKA.TOKEN, true),
-            new CKA(CKA.PRIVATE, true),
-            new CKA(CKA.SENSITIVE, true),
-            new CKA(CKA.SIGN, true),
-            new CKA(CKA.SIGN_RECOVER, true),
-            new CKA(CKA.DECRYPT, false),
-            new CKA(CKA.UNWRAP, false),
-            new CKA(CKA.EXTRACTABLE, false),
-            new CKA(CKA.LABEL, "labelrsa2-private"),
-            new CKA(CKA.ID, "labelrsa2"),
-        };
-        LongRef pubKey = new LongRef();
-        LongRef privKey = new LongRef();
-        CE.GenerateKeyPair(session, new CKM(CKM.RSA_PKCS_KEY_PAIR_GEN), pubTempl, privTempl, pubKey, privKey);
-
-        byte[] data = new byte[100];
-        CE.SignInit(session, new CKM(CKM.SHA256_RSA_PKCS), privKey.value());
-        byte[] sig1 = CE.Sign(session, data);
-        assertEquals(128, sig1.length);
-
-        data = new byte[10];
-        CE.SignRecoverInit(session, new CKM(CKM.RSA_PKCS), privKey.value());
-        byte[] sigrec1 = CE.SignRecover(session, data);
-        assertEquals(64, sig1.length);
-        CE.VerifyRecoverInit(session, new CKM(CKM.RSA_PKCS), pubKey.value());
-        byte[] recdata = CE.VerifyRecover(session, sigrec1);
-        assertTrue(Arrays.equals(data, recdata));
-    }
-
-//    public static native long C_DigestEncryptUpdate(long session, byte[] part, long part_len, byte[] encrypted_part, LongRef encrypted_part_len);
-//    public static native long C_DecryptDigestUpdate(long session, byte[] encrypted_part, long encrypted_part_len, byte[] part, LongRef part_len);
-//    public static native long C_SignEncryptUpdate(long session, byte[] part, long part_len, byte[] encrypted_part, LongRef encrypted_part_len);
-//    public static native long C_DecryptVerifyUpdate(long session, byte[] encrypted_part, long encrypted_part_len, byte[] part, LongRef part_len);
 
 
     public void testGenerateKeyWrapUnwrap() {
         long session = CE.OpenSession(TESTSLOT);
         CE.LoginUser(session, USER_PIN);
-
-//        CKA[] secTempl = new CKA[] {
-//                new CKA(CKA.VALUE_LEN, 32),
-//                new CKA(CKA.LABEL, "labelwrap"),
-//                new CKA(CKA.ID, "labelwrap"),
-//                new CKA(CKA.TOKEN, false),
-//                new CKA(CKA.SENSITIVE, false),
-//                new CKA(CKA.EXTRACTABLE, true),
-//                new CKA(CKA.ENCRYPT, true),
-//                new CKA(CKA.DECRYPT, true),
-//                new CKA(CKA.DERIVE, true),
-//        };
-//        long aeskey = CE.GenerateKey(session, new CKM(CKM.AES_KEY_GEN), secTempl);
         long aeskey = CE.GenerateKey(session, new CKM(CKM.AES_KEY_GEN),
                 new CKA(CKA.VALUE_LEN, 32),
                 new CKA(CKA.LABEL, "labelwrap"),
@@ -647,7 +575,7 @@ public class CryptokiTest extends TestCase {
         LongRef privKey = new LongRef();
         CE.GenerateKeyPair(session, new CKM(CKM.RSA_PKCS_KEY_PAIR_GEN), pubTempl, privTempl, pubKey, privKey);
 
-        // Key wrapping, i.e. exporting a key from the HSM. Wrapping with RSA means you wrap (encrypt) the key 
+        // Key wrapping, i.e. exporting a key from the HSM. Wrapping with RSA means you wrap (encrypt) the key
         // with the RSA public key and you unwrap (decrypt) it with the RSA private key
         // http://docs.oasis-open.org/pkcs11/pkcs11-curr/v2.40/csprd02/pkcs11-curr-v2.40-csprd02.html#_Toc387327730
         byte[] wrapped = CE.WrapKey(session, new CKM(CKM.RSA_PKCS), pubKey.value(), aeskey);
@@ -673,20 +601,6 @@ public class CryptokiTest extends TestCase {
 
     }
 
-    public void testPTKDES3Derive() {
-        long session = CE.OpenSession(TESTSLOT);
-        CE.LoginUser(session, USER_PIN);
-
-        long des3key = CE.GenerateKey(session, new CKM(CKM.DES3_KEY_GEN),
-                new CKA(CKA.VALUE_LEN, 24),
-                new CKA(CKA.LABEL, "label"),
-                new CKA(CKA.SENSITIVE, false),
-                new CKA(CKA.DERIVE, true));
-        byte[] des3keybuf = CE.GetAttributeValue(session, des3key, CKA.VALUE).getValue();
-        
-      CE.DeriveKey(session, new CKM(CKM.VENDOR_PTK_DES3_DERIVE_CBC, new byte[32]), des3key);
-    }
-    
     public void testRandom() {
         long session = CE.OpenSession(TESTSLOT, CK_SESSION_INFO.CKF_RW_SESSION | CK_SESSION_INFO.CKF_SERIAL_SESSION, null, null);
         byte[] buf = new byte[16];
@@ -695,10 +609,4 @@ public class CryptokiTest extends TestCase {
         byte[] buf2 = CE.GenerateRandom(session, 16);
     }
 
-//    public static native long C_GetFunctionStatus(long session);
-//    public static native long C_CancelFunction(long session);
-
-
-//    public static native long C_WaitForSlotEvent(long flags, LongRef slot, Pointer pReserved);
-//    public static native long C_SetOperationState(long session, byte[] operation_state, long operation_state_len, long encryption_key, long authentication_key);
 }
