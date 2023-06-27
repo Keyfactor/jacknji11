@@ -19,6 +19,10 @@ If you want to build without running the tests, use:
 
 >mvn install -DskipTests
 
+# Releases
+
+Releases are published to [Artifactory](https://artifactory.primekey.com/ui/packages/gav:%2F%2Fcom.keyfactor:jacknji11?name=jacknji&type=packages).
+
 # Run tests
 The tests, from src/test/java/org/pkcs11/jacknji11/CryptokiTest.java, are run on every call to mvn install.
 In order to run the tests on your HSMs (note that not all operations may pass) you can set these environment variables:
