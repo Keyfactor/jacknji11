@@ -1,50 +1,56 @@
-# Java Interface for PKCS#11.
+# JackNJI
 
 Provides a Java PKCS#11 interface that provides low-level interface
 as close as possible to the cryptoki C interface and wraps with
 Java-styled interface providing convenience methods and using
 exceptions for error handling.
 
-Uses a provider architecture to allow any implementation of the 
-native mapping. Includes JNA < https://github.com/java-native-access/jna > 
+Uses a provider architecture to allow any implementation of the
+native mapping. Includes [JNA](https://github.com/java-native-access/jna)
 as default provider to bridge between Java and native cryptoki lib.
 
-# Install
+We use this library as the [foundational building block for our PKCS#11
+provider P11NG](https://neo.repoman.primekey.com/keyfactor-commons/jacknji11).
 
-Build and install with:
+This repository is a fork of [github.com/JoelHockey/jacknji11](https://github.com/joelhockey/jacknji11).
 
->mvn install
+## Use
 
-If you want to build without running the tests, use:
+### Maven
 
->mvn install -DskipTests
+Put the following dependency in your ``pom.xml``:
 
-# Releases
+```xml
+<dependency>
+    <groupId>com.keyfactor</groupId>
+    <artifactId>jacknji11</artifactId>
+    <version>1.2.6</version>
+</dependency>
+```
+## Building
 
-Releases are published to [Artifactory](https://artifactory.primekey.com/ui/packages/gav:%2F%2Fcom.keyfactor:jacknji11?name=jacknji&type=packages).
+You need to connect to `vpn.primekey.com` to resolve internal build dependencies.
 
-# Run tests
-The tests, from src/test/java/org/pkcs11/jacknji11/CryptokiTest.java, are run on every call to mvn install.
-In order to run the tests on your HSMs (note that not all operations may pass) you can set these environment variables:
+Then build with Maven:
 
 ```
-export JACKNJI11_TEST_TESTSLOT=1762252043
-export JACKNJI11_TEST_INITSLOT=1762252043
-export JACKNJI11_TEST_SO_PIN=sopin
-export JACKNJI11_TEST_USER_PIN=userpin
+mvn versions:set -DnewVersion=$(git tag -l | tail -n 1 | tr -d 'v')
+mvn package source:jar -DskipTests
 ```
 
-# Loading native cryptoki library
-By default, the `cryptoki` library (`cryptoki.dll` or `libcryptoki.so`) must be available (`LD_LIBRARY_PATH` for linux).
-You must either copy/symlink your library to have this name, or you can specify the library path using
-`JACKNJI11_PKCS11_LIB_PATH`.
+This will produce both the `.jar` and the `-sources.jar` in the `target` folder
+without running the tests.
 
-If for example you run SoftHSM2, you have could either:
-```
-export JACKNJI11_PKCS11_LIB_PATH=/usr/lib/softhsm/libsofthsm2.so
-```
-or
-```
-sudo ln -s /usr/lib/softhsm/libsofthsm2.so /usr/lib/softhsm/libcryptoki.so
-export LD_LIBRARY_PATH=/usr/lib/softhsm
-```
+## Release
+
+Jenkins X will automatically create a new release when commits are made to the `release/keyfactor` branch.
+
+The `jar` file is published to [Artifactory](https://artifactory.primekey.com/ui/packages/gav:%2F%2Fcom.keyfactor:jacknji11?name=jacknji&type=packages).
+
+Before release, integration testing is done against [SoftHSM 2](https://github.com/opendnssec/SoftHSMv2).
+
+## Contribute upstream
+
+Improvements and bug fixes should be contributed upstream. The `master` branch is kept in sync with [our fork on GitHub](https://github.com/Keyfactor/jacknji11).
+
+Check [the documentation](https://docs.k8s.primetest.se/development/contribute-upstream.html) for details how to push to GitHub and create a PR.
