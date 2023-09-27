@@ -12,5 +12,4 @@ spec:
     context: release
     source: release.yaml
     branches:
-    - ^main$
-    - ^release/.*$
+    - ^release/keyfactor$
