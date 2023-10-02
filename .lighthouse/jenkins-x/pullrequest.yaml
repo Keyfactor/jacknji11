@@ -8,7 +8,7 @@ spec:
     - name: test
       taskSpec:
         stepTemplate:
-          image: uses:lighthouse:devops/jx3-pipeline-catalog-keyfactor/tasks/java-jar/pullrequest.yaml@master
+          image: uses:lighthouse:devops/jx3-pipeline-catalog-keyfactor/tasks/java-jar/pullrequest.yaml@main
         steps:
         - name: git-clone
         - name: git-merge
