@@ -8,7 +8,8 @@ spec:
     - name: release
       taskSpec:
         stepTemplate:
-          image: uses:lighthouse:devops/jx3-pipeline-catalog-keyfactor/tasks/java-jar/release.yaml@master
+          image: uses:lighthouse:devops/jx3-pipeline-catalog-keyfactor/tasks/java-jar/release.yaml@main
+          name: ""
         steps:
         - name: git-clone
         - name: tag-next-version
