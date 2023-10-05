@@ -14,7 +14,7 @@ spec:
         - name: git-clone
         - name: tag-next-version
         - name: jx-variables
-        - name: promote-changelog
+        #- name: promote-changelog
         - name: test-build-and-publish
           image: harbor.k8s.primetest.se/devops/buildtools-alma9-jre11:0.5.0
           script: |
