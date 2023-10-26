@@ -24,7 +24,7 @@ Put the following dependency in your ``pom.xml``:
 <dependency>
     <groupId>com.keyfactor</groupId>
     <artifactId>jacknji11</artifactId>
-    <version>1.2.6</version>
+    <version>1.2.12</version>
 </dependency>
 ```
 ## Building

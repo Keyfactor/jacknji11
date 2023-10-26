@@ -7,7 +7,7 @@
   <groupId>com.keyfactor</groupId>
   <artifactId>jacknji11</artifactId>
   <!-- This version is set automatically by the pipelines in .lighthouse/jenkins-x -->
-  <version>1.2.12</version>
+  <version>0.0.0</version>
   <name>jacknji11</name>
   <packaging>jar</packaging>
 
