@@ -23,7 +23,7 @@ package org.pkcs11.jacknji11;
 
 /**
  * This is the preferred java interface for calling cryptoki functions.
- *
+ * <p>
  * jacknji11 provides 3 interfaces for calling cryptoki functions (plus 2 for
  * backwards compatibility).
  * <ol>
@@ -57,7 +57,30 @@ package org.pkcs11.jacknji11;
  */
 public class CryptokiE {
 
+    /**
+     * Underlying Cryptoki object.
+     */
     private final Cryptoki c;
+
+    /**
+     * Strategy for determining the length of attributes in a GetAttribute process.
+     * <p>
+     * Default: {@link AttributeLengthStrategy.IndefiniteLengthStrategy}
+     *
+     * @see AttributeLengthStrategy.MaxLengthStrategy
+     * @see AttributeLengthStrategy.IndefiniteLengthStrategy
+     */
+    private AttributeLengthStrategy attributeLengthStrategy = new AttributeLengthStrategy.IndefiniteLengthStrategy();
+
+    /**
+     * Flag enabling batch mode for getting attributes.
+     * If <code>true</code>, then all attributes are retrieved in a single call to
+     * <code>C_GetAttributeValue</code>.  If <code>false</code>, then each attribute is
+     * retrieved in a separate call to <code>C_GetAttributeValue</code>.
+     * <p>
+     * Default: true
+     */
+    private boolean attributeBatchModeEnabled = true;
 
     public CryptokiE() {
       this.c = new Cryptoki();
@@ -612,10 +635,15 @@ public class CryptokiE {
     }
 
     /**
-     * Obtains the value of one or more object attributes.
+     * Obtains the value of one or more object attributes, or the lengths needed to be allocated in order to retrieve the values.
+     * See PKCS#11 v2.40 section 5.7, C_GetAttributeValue.
+     *   3. Otherwise, if the pValue field has the value NULL_PTR, then the ulValueLen field is modified to hold the exact length of the specified attribute for the object
+     *   
      * @param session the session's handle
      * @param object the objects's handle
-     * @param templ specifies attributes, gets values
+     * @param templ specifies attributes, if length of templ[i].uLvalueLen is 0 it will be set to the length of the value needed, 
+     * if templ[i].pValue is allocated with the correct length to hold the value the value is filled into templ[i].pValue
+     * @see #GetAttributeValue(long, long, long...)
      * @see C#GetAttributeValue(long, long, CKA[])
      * @see NativeProvider#C_GetAttributeValue(long, long, CKA[], long)
      */
@@ -624,7 +652,17 @@ public class CryptokiE {
             return;
         }
         long rv = c.GetAttributeValue(session, object, templ);
-        if (rv != CKR.OK) throw new CKRException(rv);
+        // PKCS#11 v2.40, section 5.7, C_GetAttributeValue
+        //  Note that the error codes CKR_ATTRIBUTE_SENSITIVE, CKR_ATTRIBUTE_TYPE_INVALID, and CKR_BUFFER_TOO_SMALL 
+        //  do not denote true errors for C_GetAttributeValue.  If a call to C_GetAttributeValue returns any of these 
+        //  three values, then the call MUST nonetheless have processed every attribute in the template supplied to 
+        //  C_GetAttributeValue.  Each attribute in the template whose value can be returned by the call to 
+        //  C_GetAttributeValue will be returned by the call to C_GetAttributeValue.
+        // So we will assume that values are processed and returned, perhaps as 0 length, null values (CK_UNAVAILABLE_INFORMATION)
+        // Unless CKR_BUFFER_TOO_SMALL that actually is something the caller must fix and the caller should be notified
+        if (rv != CKR.OK && rv != CKR.ATTRIBUTE_SENSITIVE && rv != CKR.ATTRIBUTE_TYPE_INVALID) {
+            throw new CKRException(rv);
+        }
     }
 
     /**
@@ -636,18 +674,8 @@ public class CryptokiE {
      * @see NativeProvider#C_GetAttributeValue(long, long, CKA[], long)
      */
     public CKA GetAttributeValue(long session, long object, long cka) {
-        CKA[] templ = {new CKA(cka)};
-        long rv = c.GetAttributeValue(session, object, templ);
-        if (rv == CKR.ATTRIBUTE_TYPE_INVALID || templ[0].ulValueLen == 0) {
-            return templ[0];
-        }
-        if (rv != CKR.OK) throw new CKRException(rv);
-
-        // allocate memory and call again
-        templ[0].pValue = new byte[(int) templ[0].ulValueLen];
-        rv = c.GetAttributeValue(session, object, templ);
-        if (rv != CKR.OK) throw new CKRException(rv);
-        return templ[0];
+        // the general fetching process optimizes single fetch as well
+        return GetAttributeValue(session, object, new long[] { cka })[0];
     }
 
     /**
@@ -664,33 +692,8 @@ public class CryptokiE {
         if (types == null || types.length == 0) {
             return new CKA[0];
         }
-        CKA[] templ = new CKA[types.length];
-        for (int i = 0; i < types.length; i++) {
-            templ[i] = new CKA(types[i], null);
-        }
 
-        // try getting all at once
-        try {
-            GetAttributeValue(session, object, templ);
-            // allocate memory and go again
-            for (CKA att : templ) {
-                att.pValue = att.ulValueLen > 0 ? new byte[(int) att.ulValueLen] : null;
-            }
-            GetAttributeValue(session, object, templ);
-            return templ;
-        } catch (CKRException ckre) {
-            // if we got CKR_ATTRIBUTE_TYPE_INVALID, then handle below
-            if (ckre.getCKR() != CKR.ATTRIBUTE_TYPE_INVALID) {
-                throw ckre;
-            }
-        }
-
-        // send gets one at a time
-        CKA[] result = new CKA[types.length];
-        for (int i = 0; i < types.length; i++) {
-            result[i] = GetAttributeValue(session, object, types[i]);
-        }
-        return result;
+        return new GetAttributeProcess(c, session, object, attributeLengthStrategy, attributeBatchModeEnabled, types).fetch();
     }
 
     /**
@@ -775,27 +778,45 @@ public class CryptokiE {
      * @see NativeProvider#C_FindObjectsInit(long, CKA[], long)
      */
     public long[] FindObjects(long session, CKA... templ) {
+        // According to https://docs.oasis-open.org/pkcs11/pkcs11-base/v2.40/os/pkcs11-base-v2.40-os.html#_Toc323205460:
+        // "After calling C_FindObjectsInit, the application may call
+        // C_FindObjects one or more times to obtain handles for objects
+        // matching the template, and then eventually call
+        // C_FindObjectsFinal to finish the active search operation."
         FindObjectsInit(session, templ);
-        int maxObjects = 1024;
-        // call once
-        long[] result = FindObjects(session, maxObjects);
-        // most likely we are done now
-        if (result.length < maxObjects) {
-            FindObjectsFinal(session);
-            return result;
-        }
-
-        // this is a lot of objects!
-        while (true) {
-            maxObjects *= 2;
-            long[] found = FindObjects(session, maxObjects);
-            long[] temp = new long[result.length + found.length];
-            System.arraycopy(result, 0, temp, 0, result.length);
-            System.arraycopy(found, 0, temp, result.length, found.length);
-            result = temp;
-            if (found.length < maxObjects) { // exhausted
-                FindObjectsFinal(session);
+        boolean success = false;
+        try {
+            int maxObjects = 1024;
+            // call once
+            long[] result = FindObjects(session, maxObjects);
+            // most likely we are done now
+            if (result.length < maxObjects) {
+                success = true;
                 return result;
+            }
+
+            // this is a lot of objects! try to find in batches of 1024 more, adding to result as we go
+            while (true) {
+                long[] found = FindObjects(session, maxObjects);
+                long[] temp = new long[result.length + found.length];
+                System.arraycopy(result, 0, temp, 0, result.length);
+                System.arraycopy(found, 0, temp, result.length, found.length);
+                result = temp;
+                if (found.length < maxObjects) { // exhausted, didn't find 1024 more
+                    success = true;
+                    return result;
+                }
+            }
+        } finally {
+            try {
+                // Must be called even if there is an error, otherwise the
+                // session will remain in the FindObjects state and not
+                // allow any other operations.
+                FindObjectsFinal(session);
+            } catch (RuntimeException e) {
+                if (success) { // Don't throw another exception on error
+                    throw e;
+                }
             }
         }
     }
@@ -1841,5 +1862,49 @@ public class CryptokiE {
         byte[] result = new byte[newSize];
         System.arraycopy(buf, 0, result, 0, result.length);
         return result;
+    }
+
+    /**
+     * Obtain metrics for calls on underlying {@link NativeProvider}
+     * @return metrics object
+     */
+    public NativeProviderMetrics getMetrics() {
+        return c.getMetrics();
+    }
+
+    /**
+     * Set the strategy to use for getting the length of an attribute.
+     *
+     * @param attributeLengthStrategy the strategy to use for getting the length of an attribute
+     */
+    public void setAttributeLengthStrategy(AttributeLengthStrategy attributeLengthStrategy) {
+        this.attributeLengthStrategy = attributeLengthStrategy;
+    }
+
+    /**
+     * Get the strategy to use for getting the length of an attribute.
+     *
+     * @return the strategy to use for getting the length of an attribute
+     */
+    public AttributeLengthStrategy getAttributeLengthStrategy() {
+        return attributeLengthStrategy;
+    }
+
+    /**
+     * Set the mode to use for getting attribute values.
+     *
+     * @param attributeBatchModeEnabled if true, then batch mode is enabled
+     */
+    public void setAttributeBatchModeEnabled(boolean attributeBatchModeEnabled) {
+        this.attributeBatchModeEnabled = attributeBatchModeEnabled;
+    }
+
+    /**
+     * Get the mode to use for getting attribute values.
+     *
+     * @return if true, then batch mode is enabled
+     */
+    public boolean isAttributeBatchModeEnabled() {
+        return attributeBatchModeEnabled;
     }
 }
